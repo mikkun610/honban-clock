@@ -1,0 +1,1 @@
+{"name":"本番時計","short_name":"本番時計","description":"共テ・名大の本番の時刻で大問の区切りを練習する時計","lang":"ja","start_url":"./index.html","scope":"./","display":"standalone","background_color":"#fbfbfa","theme_color":"#fbfbfa","icons":[{"src":"icons/icon-192.png","sizes":"192x192","type":"image/png"},{"src":"icons/icon-512.png","sizes":"512x512","type":"image/png","purpose":"any"}]}

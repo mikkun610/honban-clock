@@ -1,0 +1,821 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#fbfbfa" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#16171a" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="本番時計">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" href="icons/icon-192.png">
+<title>本番時計</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=BIZ+UDGothic:wght@700&family=BIZ+UDPGothic:wght@400;700&display=swap" rel="stylesheet">
+<style>
+/* VOICE: 試験会場の静けさ。必要なものだけ
+   IDEA: 腕時計と受験票、成績は手帳
+   PICTURE: 外周に配分の帯を巻いた文字盤（1画面に収まる）
+   COLOUR/TYPE: 生成りの白・墨・くすんだ朱 / BIZ UD ゴシック
+   LAYOUT: 上に細いバー、操作は左から出るメニューに集約。時計はスクロールなし */
+:root{color-scheme:light dark;--bg:light-dark(#fbfbfa,#16171a);--ink:light-dark(#26282b,#dcdde0);--mut:light-dark(#71757a,#8f949a);--line:light-dark(#e4e4e1,#2b2d31);--soft:light-dark(#f0f0ed,#1f2125);--a:light-dark(#a4553f,#cf9282);--a2:light-dark(#f1e4de,#33282a);--s1:light-dark(#dfb3a5,#7c5248);--s2:light-dark(#a9b1ba,#4a525c);--c:light-dark(#d6d6d2,#34373c);--red:light-dark(#e3121b,#ff3b30);--panel:light-dark(#ffffff,#1c1d21)}
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+[hidden]{display:none!important}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 "BIZ UDPGothic",system-ui,sans-serif;overflow:hidden}
+.app{display:flex;flex-direction:column;height:100dvh}
+.top{flex:none;display:flex;align-items:center;gap:6px;height:52px;padding:0 8px 0 4px;border-bottom:1px solid var(--line)}
+.top .ttl{flex:1;display:grid;line-height:1.2}
+.top .ttl b{font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.top .ttl small{font-size:12px;color:var(--mut);white-space:nowrap}
+.ib{width:44px;height:44px;border:0;background:none;color:var(--ink);border-radius:10px;cursor:pointer;display:grid;place-items:center;flex:none}
+.ib svg{width:22px;height:22px}
+main{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain}
+.pad{padding:16px max(4vw,14px) 32px;max-width:720px;margin:0 auto}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,summary:focus-visible{outline:3px solid var(--a);outline-offset:2px}
+/* 時計 */
+#v-clock{height:100%;display:flex;flex-direction:column;max-width:560px;margin:0 auto;padding:8px 14px 12px}
+.facearea{flex:1;min-height:0;display:flex;align-items:center;justify-content:center}
+.dial{height:100%;max-width:100%;aspect-ratio:1;display:block}
+.big{flex:none;text-align:center;font:700 clamp(40px,12vw,64px)/1 "BIZ UDGothic",monospace;margin:6px 0 8px;letter-spacing:-.02em;white-space:nowrap}
+#v-clock.dig .facearea{display:none}
+#v-clock.dig .big{flex:1;display:flex;align-items:center;justify-content:center;font-size:clamp(60px,21vw,170px)}
+.now{flex:none;display:flex;justify-content:space-between;align-items:baseline;gap:10px;border:1.5px solid var(--line);background:var(--soft);border-radius:12px;padding:8px 12px;transition:background .3s}
+.now .nm{font-weight:700;font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.now .lim{white-space:nowrap;font-size:14px;color:var(--mut)}
+.now .lim b{font:700 22px "BIZ UDGothic",monospace;color:var(--a);margin-left:6px}
+.now.flash{background:var(--a2);border-color:var(--a)}
+.next{flex:none;margin:5px 2px 0;color:var(--mut);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-height:1.4em}
+.next b{color:var(--a)}
+.bar{flex:none;position:relative;display:none;height:10px;margin:10px 0 0;border-radius:3px;overflow:hidden;background:var(--soft)}
+#v-clock.dig .bar{display:flex}
+.bar i{display:block;height:100%;border-right:2px solid var(--bg)}
+.bar .cur{position:absolute;top:-2px;bottom:-2px;width:3px;background:var(--ink);border:0}
+#v-clock.nop .now,#v-clock.nop .next,#v-clock.nop .bar{display:none}
+.btns{flex:none;display:flex;gap:8px;margin-top:10px}
+.btn{font:inherit;font-weight:700;min-height:48px;padding:0 14px;border-radius:12px;border:1.5px solid var(--line);background:var(--bg);color:var(--ink);cursor:pointer;line-height:1.15}
+.btns .btn{flex:1;min-height:58px}
+.btn small{display:block;font-weight:400;font-size:11px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.btn.main{background:var(--a2);border-color:var(--a);font-size:18px}
+.btn.sm{min-height:44px;padding:0 12px;font-size:14px}
+.btn[hidden]{display:none}
+/* メニュー */
+.scrim{position:fixed;inset:0;background:rgba(0,0,0,.35);opacity:0;pointer-events:none;transition:opacity .2s;z-index:20}
+.tabbar{flex:none;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));align-items:end;border-top:1px solid var(--line);background:var(--panel);padding:0 4px env(safe-area-inset-bottom)}
+.tb{display:grid;justify-items:center;gap:1px;padding:6px 0 7px;font:inherit;font-size:11px;color:var(--mut);background:none;border:0;min-height:56px;cursor:pointer}
+.tb svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.tb span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.tb[aria-current=true]{color:var(--a);font-weight:700}
+.tb:disabled{opacity:.35;cursor:not-allowed}
+.tb.center .orb{display:grid;place-items:center;width:56px;height:56px;margin-top:-22px;border-radius:50%;background:var(--panel);border:1.5px solid var(--line);color:var(--ink);box-shadow:0 2px 8px rgba(0,0,0,.12)}
+.tb.center .orb svg{width:28px;height:28px}
+.tb.center[aria-current=true] .orb{background:var(--a2);border-color:var(--a);color:var(--a)}
+.tb.center span:last-child{font-weight:700;color:var(--ink)}
+.pick{flex:1;display:grid;line-height:1.2;position:relative}
+.pick select{appearance:none;-webkit-appearance:none;border:0;background:none;font:700 17px "BIZ UDPGothic",sans-serif;color:var(--ink);min-height:30px;padding:0 22px 0 0;width:auto;max-width:100%;cursor:pointer}
+.selw{position:relative;justify-self:start;max-width:100%}.selw::after{content:"";position:absolute;right:5px;top:8px;width:7px;height:7px;border-right:2px solid var(--mut);border-bottom:2px solid var(--mut);transform:rotate(45deg);pointer-events:none}
+.pick small{font-size:12px;color:var(--mut);white-space:nowrap}
+.top{padding:env(safe-area-inset-top) 14px 0;height:calc(52px + env(safe-area-inset-top))}
+.srow{display:flex;justify-content:space-between;align-items:center;gap:10px;width:100%;min-height:56px;padding:8px 14px;border:1.5px solid var(--line);border-radius:12px;background:var(--bg);color:var(--ink);font:inherit;text-align:left;cursor:pointer}
+.srow b{font-size:16px}.srow small{color:var(--mut);font-size:13px;white-space:nowrap}
+.srow[aria-current=true]{border-color:var(--a);background:var(--a2)}
+.srow:disabled{opacity:.4;cursor:not-allowed}
+.slist{display:grid;gap:8px}
+.dh{font-size:12px;color:var(--mut);margin:14px 8px 4px}
+.di{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;min-height:46px;padding:6px 10px;border:0;border-radius:10px;background:none;color:var(--ink);font:inherit;text-align:left;cursor:pointer}
+.di small{color:var(--mut);font-size:12px;white-space:nowrap}
+.di[aria-current=true]{background:var(--a2);font-weight:700}
+.di:disabled{opacity:.4;cursor:not-allowed}
+.sw{width:40px;height:24px;border-radius:12px;background:var(--c);position:relative;flex:none;transition:background .2s}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:var(--bg);transition:transform .2s}
+[aria-checked=true] .sw{background:var(--a)}[aria-checked=true] .sw::after{transform:translateX(16px)}
+.seg{display:flex;border:1.5px solid var(--line);border-radius:10px;overflow:hidden;margin:4px 8px}
+.seg button{flex:1;font:inherit;font-size:14px;font-weight:700;min-height:40px;border:0;background:none;color:var(--mut);cursor:pointer;white-space:nowrap}
+.seg button[aria-pressed=true]{background:var(--a2);color:var(--ink)}
+.drow{display:flex;gap:6px;margin:4px 8px}
+.drow .btn{flex:1}
+/* シート・トースト */
+.sheet{position:fixed;left:0;right:0;bottom:0;background:var(--panel);border-top:1px solid var(--line);border-radius:16px 16px 0 0;padding:16px max(4vw,16px) calc(16px + env(safe-area-inset-bottom));z-index:22;transform:translateY(105%);transition:transform .22s ease;max-width:560px;margin:0 auto}
+.sheet.on{transform:none}body.sheet-open .scrim{opacity:1;pointer-events:auto}
+.sheet .dh{margin:12px 0 6px}
+.mini{flex:none;align-self:center;margin-top:6px;font:inherit;font-size:13px;color:var(--mut);background:none;border:0;min-height:32px;padding:0 12px;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+.sheet h3{margin:0 0 10px;font-size:16px}
+.toast{position:fixed;left:50%;top:60px;transform:translate(-50%,-10px);max-width:92vw;white-space:normal;text-align:center;background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:14px;opacity:0;pointer-events:none;transition:.2s;z-index:30}
+.toast.on{opacity:1;transform:translate(-50%,0)}
+/* 共通 */
+input,select,textarea{font:inherit;font-size:16px;color:var(--ink);background:var(--bg);border:1.5px solid var(--line);border-radius:8px;min-height:44px;padding:0 10px;width:100%}
+textarea{padding:8px 10px;min-height:72px;resize:vertical}
+label.f{font-size:13px;color:var(--mut);display:grid;gap:3px}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.tags{display:flex;flex-wrap:wrap;gap:6px}
+.tag{font:inherit;font-size:13px;min-height:36px;padding:0 12px;border-radius:18px;border:1.5px solid var(--line);background:var(--bg);color:var(--ink);cursor:pointer}
+.tag[aria-pressed=true]{border-color:var(--a);background:var(--a2)}
+.fn{font-size:13px;color:var(--mut);margin:10px 0 0}
+.warn{color:var(--a);font-weight:700}
+h2{font-size:17px;margin:22px 0 10px}h2:first-child{margin-top:0}
+table{width:100%;border-collapse:collapse}
+th{font-size:13px;color:var(--mut);font-weight:400;text-align:left;padding:4px 6px;border-bottom:1.5px solid var(--line);white-space:nowrap}
+td{padding:5px 4px;border-bottom:1px solid var(--line);vertical-align:top}
+td.end{font:700 18px "BIZ UDGothic",monospace;white-space:nowrap;text-align:right;padding:14px 8px 0 4px}
+td.end.over{color:var(--a)}
+td.mid{vertical-align:middle;white-space:nowrap;color:var(--mut);font-size:14px}
+td input.m,td input.num{width:4.8em;text-align:right}
+.cap{font-size:12px;color:var(--mut);margin:2px 0 0 4px}
+.del{width:44px;height:44px;border:0;background:none;color:var(--mut);font-size:20px;cursor:pointer}
+.tot{margin:12px 0;font-weight:700}.tot.over{color:var(--a)}
+.ctl{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.ctl .btn.main{flex:1 1 140px}
+.prow{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:baseline;margin-bottom:12px}
+.crow{display:grid;grid-template-columns:minmax(0,1fr) 7.5em 6em;gap:8px;margin-bottom:10px}
+fieldset{border:1.5px solid var(--line);border-radius:12px;padding:8px 12px 12px;margin:0 0 12px}
+legend{font-weight:700;padding:0 6px}
+legend small{font-weight:400;color:var(--mut);margin-left:8px;font-size:13px}
+.opt{display:flex;align-items:center;gap:10px;min-height:44px;padding:2px 6px;border-radius:8px;cursor:pointer}
+.opt input{width:22px;height:22px;min-height:0;padding:0;accent-color:var(--a);flex:none}
+.opt.dis{opacity:.4;cursor:not-allowed}
+.sub{margin:2px 0 6px 30px;padding-left:10px;border-left:3px solid var(--a)}
+.sub p{margin:4px 0;font-size:14px;color:var(--mut)}
+.list{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,260px),1fr));gap:12px}
+.card{border:1.5px solid var(--line);border-radius:12px;padding:12px 14px}
+.card h3{margin:0;font-size:16px}.card .tm{margin:0 0 8px;color:var(--mut);font-size:13px}
+.card ol{list-style:none;margin:0;padding:0}
+.card li{display:flex;justify-content:space-between;gap:10px;padding:3px 0;border-top:1px dashed var(--line)}
+.card li b{font:700 16px "BIZ UDGothic",monospace;white-space:nowrap}
+details{border:1.5px solid var(--line);border-radius:10px;padding:0 10px 8px;margin-top:10px}
+summary{cursor:pointer;color:var(--mut);font-size:14px;min-height:44px;display:flex;align-items:center;list-style:none}
+summary::-webkit-details-marker{display:none}
+summary::before{content:"";width:7px;height:7px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(-45deg);margin:0 10px 0 4px;transition:transform .2s}
+details[open]>summary::before{transform:rotate(45deg)}
+.sum{display:flex;gap:20px;align-items:baseline;flex-wrap:wrap}
+.sum div{display:grid}
+.sum span{font-size:12px;color:var(--mut)}
+.sum b{font:700 26px/1.1 "BIZ UDGothic",monospace}
+.sum b small{font:400 13px "BIZ UDPGothic",sans-serif;color:var(--mut);margin-left:2px}
+.sum .k b{color:var(--a);font-size:36px}
+.chart{margin:6px 0 0}.chart svg{display:block;width:100%;height:auto}
+.stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:6px 0 4px}
+.stats div{background:var(--soft);border-radius:8px;padding:8px 10px}
+.stats span{display:block;font-size:12px;color:var(--mut)}
+.stats b{font:700 19px "BIZ UDGothic",monospace}
+.hb{display:grid;grid-template-columns:6.5em minmax(0,1fr) 3.8em;gap:4px 8px;align-items:center;font-size:13px}
+.hb .tr{height:12px;background:var(--soft);border-radius:3px;position:relative;overflow:hidden}
+.hb .tr i{position:absolute;left:0;top:0;bottom:0;background:var(--s1);border-radius:3px}
+.hb .tr i.p{background:var(--s2);height:5px;top:auto}
+.hb .v{text-align:right;white-space:nowrap}
+.hb .l{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.leg{font-size:12px;color:var(--mut);margin:4px 0 8px}
+.leg i{display:inline-block;width:12px;height:8px;border-radius:2px;vertical-align:middle;margin:0 4px 0 10px}
+.rhead{display:flex;gap:8px;align-items:center;margin-bottom:12px}
+.rhead select{flex:1}
+.ritems{display:grid;gap:6px;margin-top:14px}
+.ritem{display:grid;grid-template-columns:3.4em minmax(0,1fr) auto;gap:10px;align-items:center;text-align:left;font:inherit;color:var(--ink);background:var(--bg);border:1.5px solid var(--line);border-radius:10px;padding:8px 12px;min-height:52px;cursor:pointer}
+.ritem .d{color:var(--mut);font-size:13px}
+.ritem .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ritem .nm small{display:block;color:var(--mut);font-size:12px}
+.ritem b{font:700 17px "BIZ UDGothic",monospace;white-space:nowrap}
+.ritem b small{font-size:12px;color:var(--mut)}
+.form{display:grid;gap:12px}
+@media(prefers-reduced-motion:reduce){.sheet,.scrim,.toast,.now,.sw,.sw::after,summary::before{transition:none}}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top" id="top">
+    <div class="ttl" id="ttl"><b id="hsub"></b><small id="hmeta"></small></div>
+    <label class="pick" id="pickWrap" hidden><span class="selw"><select id="pick" aria-label="科目"></select></span><small id="pmeta"></small></label>
+  </header>
+  <main id="main">
+    <section id="v-clock" hidden>
+      <div class="facearea"><svg class="dial" id="dial" viewBox="0 0 200 200" role="img" aria-label="本番時刻の文字盤"></svg></div>
+      <p class="big" id="clock">0:00:00</p>
+      <div class="bar" id="bar"></div>
+      <div class="now" id="now"></div>
+      <p class="next" id="next"></p>
+      <div class="btns">
+        <button class="btn main" id="go">スタート</button>
+        <button class="btn" id="lap" hidden></button>
+        <button class="btn" id="stamp" hidden>スタンプ</button>
+        <button class="btn" id="torec" hidden>記録</button>
+      </div>
+      <button class="mini" id="opt">詳細設定</button>
+    </section>
+    <section id="v-rec" class="pad" hidden></section>
+    <section id="v-plan" class="pad" hidden>
+      <div class="seg" style="margin:0 0 14px" role="group" aria-label="配分"><button data-s2="plan">配分</button><button data-s2="list">一覧</button></div>
+      <div id="p-plan">
+        <div class="prow" id="slotrow"></div>
+        <table>
+          <thead><tr><th>大問</th><th>分</th><th style="text-align:right">終了</th><th></th></tr></thead>
+          <tbody id="rows"></tbody>
+        </table>
+        <p class="tot" id="tot"></p>
+        <div class="ctl">
+          <button class="btn sm" id="addr">＋ 見直し</button>
+          <button class="btn sm" id="add">＋ 行</button>
+          <button class="btn sm" id="def">初期値に戻す</button>
+        </div>
+      </div>
+      <div id="p-list"></div>
+    </section>
+    <section id="v-set" class="pad" hidden>
+      <h2>時計</h2>
+      <div class="seg" style="margin:0 0 6px" role="group" aria-label="時計の種類"><button data-face="ana">アナログ</button><button data-face="dig">デジタル</button></div>
+      <button class="di" id="tg-p" role="switch">配分を表示<span class="sw"></span></button>
+      <button class="di" id="tg-n" role="switch">区切りで通知<span class="sw"></span></button>
+      <p class="fn" id="saveNote"></p>
+    </section>
+    <section id="v-subj" class="pad" hidden></section>
+  </main>
+  <nav class="tabbar" aria-label="画面">
+    <button class="tb" data-go="subj"><svg viewBox="0 0 24 24"><path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M5 17a3 3 0 0 1 3-3h11"/></svg><span>科目</span></button>
+    <button class="tb" data-go="plan"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 4v8l6 4"/></svg><span>配分</span></button>
+    <button class="tb center" data-go="clock"><span class="orb"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span><span id="tbClock">時計</span></button>
+    <button class="tb" data-go="rec"><svg viewBox="0 0 24 24"><path d="M4 19h16M7 15v-4M12 15V7M17 15v-6"/></svg><span>記録</span></button>
+    <button class="tb" data-go="set"><svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg><span>設定</span></button>
+  </nav>
+</div>
+
+<div class="scrim" id="scrim"></div>
+
+
+<div class="sheet" id="sheet" role="dialog" aria-label="記録を保存">
+  <h3 id="shTitle">記録する</h3>
+  <div class="form">
+    <label class="f">名前<input id="shName"></label>
+    <div id="shCats"></div>
+    <div class="ctl" style="margin-top:0"><button class="btn main" id="shSave">保存</button><button class="btn" id="shCancel">やめる</button></div>
+  </div>
+</div>
+<div class="sheet" id="optSheet" role="dialog" aria-label="詳細設定">
+  <h3>詳細設定</h3>
+  <p class="dh">大問から始める</p>
+  <div class="tags" id="fromSecs"></div>
+  <p class="dh">時刻から始める</p>
+  <div class="row2"><label class="f">本番の時刻<input type="time" id="ftime" step="60"></label><label class="f">開始から（分）<input type="number" id="fmin" inputmode="numeric" min="0"></label></div>
+  <div class="ctl" style="margin-top:8px"><button class="btn sm" id="fgo">この時刻から</button></div>
+  <p class="dh">ずれの調整</p>
+  <div class="ctl" style="margin-top:0"><button class="btn sm" id="m1">−1分</button><button class="btn sm" id="p1">＋1分</button><button class="btn sm" id="rst">最初に戻す</button></div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+{
+const N=ps=>ps.map((p,i)=>[`第${i+1}問`,p]);
+const NN=(k)=>Array.from({length:k},(_,i)=>[`第${i+1}問`,null]);
+/* ---- 共テ ---- */
+const CAT=[
+ {id:'geo',g:'chireki',name:'地理総合，地理探究',short:'地理',secs:N([13,12,21,17,20,17])},
+ {id:'jhi',g:'chireki',name:'歴史総合，日本史探究',short:'日本史',secs:N([25,15,15,15,15,15])},
+ {id:'whi',g:'chireki',name:'歴史総合，世界史探究',short:'世界史',secs:N([25,21,18,18,18])},
+ {id:'rin',g:'chireki',name:'公共，倫理',short:'倫理',secs:N([12,13,28,15,16,16])},
+ {id:'sei',g:'chireki',name:'公共，政治・経済',short:'政経',secs:N([12,13,19,19,18,19])},
+ {id:'ghk',g:'chireki',name:'地理総合／歴史総合／公共',short:'地総歴総公共',areas:[['chiso','地理総合','地総',N([13,12,13,12])],['rekiso','歴史総合','歴総',N([25,25])],['kokyo','公共','公共',N([12,13,12,13])]]},
+ {id:'koku',g:'koku',name:'国語',short:'国語',start:780,min:90,mins:[20,20,10,20,20],secs:[['第1問 評論',45],['第2問 小説',45],['第3問 実用文',20],['第4問 古文',45],['第5問 漢文',45]]},
+ {id:'engR',g:'eng',name:'英語リーディング',short:'英語R',start:920,min:80,secs:N([6,12,9,12,16,12,16,17])},
+ {id:'kiso',g:'rika',name:'理科基礎（2つ選択）',short:'理科基礎',areas:[['pb','物理基礎','物基',N([16,16,18])],['cb','化学基礎','化基',N([30,20])],['bb','生物基礎','生基',N([16,18,16])],['eb','地学基礎','地基',N([20,10,10,10])]]},
+ {id:'phy',g:'rika',name:'物理',short:'物理',secs:N([25,25,25,25])},
+ {id:'chem',g:'rika',name:'化学',short:'化学',secs:N([20,20,20,20,20])},
+ {id:'bio',g:'rika',name:'生物',short:'生物',secs:N([20,20,20,20,20])},
+ {id:'ear',g:'rika',name:'地学',short:'地学',secs:N([18,15,28,21,18])},
+ {id:'m1a',g:'m1',name:'数学Ⅰ，数学A',short:'数ⅠA',start:780,min:70,secs:N([30,30,20,20])},
+ {id:'m1',g:'m1',name:'数学Ⅰ',short:'数Ⅰ',start:780,min:70,secs:N([20,30,30,20])},
+ {id:'m2',g:'m2',name:'数学Ⅱ，数学B，数学C',short:'数ⅡBC',start:900,min:70,secs:[['第1問',15],['第2問',15],['第3問',22],['選択問題1',16],['選択問題2',16],['選択問題3',16]]},
+ {id:'info',g:'info',name:'情報Ⅰ',short:'情報Ⅰ',start:1020,min:60,secs:N([20,30,25,25])}
+];
+const GRP={chireki:{label:'地理歴史・公民',day:1,max:2},koku:{label:'国語',day:1,max:1},eng:{label:'外国語',day:1,max:1,note:'リスニングは音声で進むので対象外。'},rika:{label:'理科',day:2,max:2,note:'理科基礎は2つ選んで1科目扱い。'},m1:{label:'数学①',day:2,max:1},m2:{label:'数学②',day:2,max:1},info:{label:'情報',day:2,max:1}};
+/* ---- 名大（前期・情報学部 自然情報学科） ---- */
+const MEI=[
+ {id:'n_eng',name:'英語',short:'名大英語',day:1,start:600,min:105,full:400,mins:[30,30,25,20],secs:[['第1問 長文',null],['第2問 長文',null],['第3問 会話文',null],['第4問 英作文',null]]},
+ {id:'n_sci',name:'物理',short:'名大物理',day:1,start:825,min:75,full:300,mins:[25,25,25],secs:NN(3)},
+ {id:'n_chem',name:'化学',short:'名大化学',day:1,start:825,min:75,full:300,mins:[20,20,20,15],secs:[['第1問 理論',null],['第2問 理論・無機',null],['第3問 有機',null],['第4問 高分子・天然物',null]]},
+ {id:'n_math',name:'数学',short:'名大数学',day:2,start:600,min:150,full:400,mins:[40,40,35,35],secs:NN(4)}
+];
+const SETS={kyote:{name:'共テ',days:{1:'1日目 1/16(土)',2:'2日目 1/17(日)'}},meidai:{name:'名大',days:{1:'2/25(木)',2:'2/26(金)'}}};
+const KEY='kyote-clock-r9-v2';
+let S={tab:'subj',s2:'plan',face:'ana',pon:true,notif:true,set:'kyote',csets:[],sel:null,sels:{},setup:{on:{},areas:{},first:{}},custom:[],plans:{},runs:{},recs:[]};
+try{const v=JSON.parse(localStorage.getItem(KEY));if(v&&typeof v==='object')S=Object.assign(S,v)}catch(e){}
+S.setup=Object.assign({on:{},areas:{},first:{}},S.setup||{});
+if(!S.runs||typeof S.runs!=='object')S.runs={};
+if(S.run){if(S.run.id)S.runs[S.run.id]=Object.assign({laps:[]},S.run);delete S.run}
+if(!Array.isArray(S.recs))S.recs=[];if(!Array.isArray(S.csets))S.csets=[];if(!S.sels||typeof S.sels!=='object')S.sels={};
+S.custom.forEach(u=>{if(!u.set)u.set='kyote'});
+if(!['clock','rec','plan','set','subj'].includes(S.tab))S.tab='clock';
+if(!['plan','list'].includes(S.s2))S.s2='plan';
+const $=id=>document.getElementById(id);
+const toMin=t=>{const[h,m]=String(t||'0:0').split(':').map(Number);return(h||0)*60+(m||0)};
+const p2=n=>String(n).padStart(2,'0');
+const hm=m=>{m=Math.round(m);return Math.floor(m/60)+':'+p2(m%60)};
+const hms=t=>{t=Math.floor(t);return Math.floor(t/3600)+':'+p2(Math.floor(t/60)%60)+':'+p2(t%60)};
+const mmss=t=>{const s=t<0?'−':'';t=Math.abs(Math.round(t));return s+Math.floor(t/60)+':'+p2(t%60)};
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const isRest=n=>/見直|余/.test(n);
+const today=()=>{const d=new Date();return d.getFullYear()+'-'+p2(d.getMonth()+1)+'-'+p2(d.getDate())};
+const md=s=>{const m=String(s||'').match(/^\d+-(\d+)-(\d+)/);return m?(+m[1])+'/'+(+m[2]):''};
+const f1=x=>Number.isFinite(x)?(Math.round(x*10)/10).toString():'–';
+const clean=o=>JSON.parse(JSON.stringify(o));
+let toastT=0;const toast=m=>{const t=$('toast');t.textContent=m;t.classList.add('on');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('on'),1800)};
+
+/* ---------- 保存（端末＋クラウド） ---------- */
+let cloud=null,cloudLast='',cloudT=0;const pending=new Set();
+const CK=['setup','custom','plans','face','pon','notif','csets','set','sels'];
+const cloudPart=()=>JSON.stringify(Object.fromEntries(CK.map(k=>[k,S[k]])));
+function saveLocal(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
+function save(){
+  saveLocal();
+  if(cloud){clearTimeout(cloudT);cloudT=setTimeout(async()=>{const j=cloudPart();if(j===cloudLast)return;try{await cloud.st.set(JSON.parse(j));cloudLast=j}catch(e){}},800)}
+}
+async function putRec(r){if(!cloud)return;pending.add(r.id);try{await cloud.rc.doc(r.id).set(clean(r))}catch(e){toast('クラウドに保存できなかった（端末には保存済み）')}pending.delete(r.id)}
+async function delRec(id){if(!cloud)return;try{await cloud.rc.doc(id).delete()}catch(e){}}
+(async()=>{
+  try{
+    if(!window.claude||!window.claude.use)return;
+    const db=await window.claude.use('db'),user=await window.claude.use('user');
+    if(!db||!user)return;const uid=await user.id();if(!uid)return;
+    const st=db.doc('data/users/'+uid+'/state'),rc=db.doc('data/users/'+uid+'/main').collection('recs');
+    const snap=await st.get();
+    if(snap.exists){const d=snap.data()||{};for(const k of CK)if(d[k]!==undefined)S[k]=clean(d[k]);S.setup=Object.assign({on:{},areas:{},first:{}},S.setup||{});if(!Array.isArray(S.csets))S.csets=[];if(!S.sels)S.sels={};S.custom.forEach(u=>{if(!u.set)u.set='kyote'})}
+    else{try{await st.set(JSON.parse(cloudPart()))}catch(e){return}}
+    cloudLast=cloudPart();cloud={st,rc};
+    let first=true;
+    rc.onSnapshot(q=>{
+      if(q.metadata.fromCache)return;
+      const list=q.docs.map(d=>Object.assign({},d.data(),{id:d.id}));
+      if(first){first=false;const ids=new Set(list.map(r=>r.id));const local=S.recs.filter(r=>!ids.has(r.id));if(local.length){local.forEach(putRec);S.recs=list.concat(local);saveLocal();redraw();return}}
+      const ids=new Set(list.map(r=>r.id));
+      S.recs=list.concat(S.recs.filter(r=>pending.has(r.id)&&!ids.has(r.id)));
+      saveLocal();if(S.tab==='rec'&&!ed)drawRec();
+    },()=>{});
+    saveLocal();fixSel();redraw();
+  }catch(e){}
+})();
+
+/* ---------- セット・科目 ---------- */
+const setName=id=>SETS[id]?SETS[id].name:((S.csets.find(c=>c.id===id)||{}).name||'セット');
+const dayLabel=I=>I.day===3?'':(SETS[I.set]&&SETS[I.set].days[I.day])||'';
+const inGrp=g=>CAT.filter(c=>c.g===g&&S.setup.on[c.id]).map(c=>c.id);
+function grpStart(id,g){const ch=inGrp(g);if(ch.length<2)return 640;const f=ch.includes(S.setup.first[g])?S.setup.first[g]:ch[0];return id===f?570:640}
+function info(id){
+  const c=CAT.find(x=>x.id===id);
+  if(c){
+    let secs=c.secs,sig='';
+    if(c.areas){const pk=S.setup.areas[id]||[];secs=[];c.areas.forEach(([k,,ab,ss])=>{if(pk.includes(k)){sig+=k;ss.forEach(([n,p])=>secs.push([ab+' '+n,p]))}})}
+    return{id,set:'kyote',name:c.name,short:c.short,day:GRP[c.g].day,min:c.min||60,st:c.start!=null?c.start:grpStart(id,c.g),secs,sig:sig+(c.mins?'m':''),mins:c.mins,g:c.g};
+  }
+  const m=MEI.find(x=>x.id===id);
+  if(m)return{id,set:'meidai',name:m.name,short:m.short,day:m.day,min:m.min,st:m.start,secs:m.secs,mins:m.mins,sig:'m2',full:m.full};
+  const u=S.custom.find(x=>x.id===id);
+  if(u)return{id,set:u.set,name:u.name||'（無題）',short:u.name||'（無題）',day:3,min:Math.max(1,Math.min(600,+u.min||1)),st:toMin(u.start),secs:null,sig:'c',u};
+  return null;
+}
+function alloc(ps,T){const s=ps.reduce((a,b)=>a+b,0);const raw=ps.map(p=>p*T/s);const f=raw.map(Math.floor);let r=T-f.reduce((a,b)=>a+b,0);raw.map((x,i)=>[x-f[i],i]).sort((a,b)=>b[0]-a[0]).forEach(([,i])=>{if(r>0){f[i]++;r--}});return f}
+function fresh(i){if(!i.secs||!i.secs.length)return[{n:'第1問',m:i.min}];const m=i.mins&&i.mins.length===i.secs.length?i.mins:alloc(i.secs.map(x=>x[1]),i.min);return i.secs.map(([n,p],k)=>({n,m:m[k],p}))}
+function plan(id){const i=info(id);let p=S.plans[id];if(!p||p.sig!==i.sig)p=S.plans[id]={sig:i.sig,secs:fresh(i)};return p}
+function activeIn(set){
+  let L=[];
+  if(set==='kyote')L=CAT.filter(c=>S.setup.on[c.id]).map(c=>c.id);
+  if(set==='meidai')L=MEI.map(m=>m.id);
+  L=L.concat(S.custom.filter(u=>u.set===set).map(u=>u.id));
+  return L.map(info).sort((a,b)=>a.day-b.day||a.st-b.st).map(x=>x.id);
+}
+const active=()=>activeIn(S.set);
+const validSet=id=>!!SETS[id]||S.csets.some(c=>c.id===id);
+function bounds(id){
+  const i=info(id),T=i.min;let c=0;const out=[];
+  plan(id).secs.forEach(x=>{const a=c;c+=Math.max(0,+x.m||0);const b=Math.min(c,T);if(b>a&&a<T)out.push({n:x.n||'（無題）',a,b})});
+  if(c<T)out.push({n:'余り',a:c,b:T});
+  return out;
+}
+const short=n=>{const d=n.match(/\d+/);const t=n.replace(/^(物基|化基|生基|地基|地総|歴総|公共)\s*/,'');return t[0]==='第'&&d?d[0]:t[0]+(d?d[0]:'')};
+const color=(x,i)=>isRest(x.n)?'var(--c)':(i%2?'var(--s2)':'var(--s1)');
+
+/* ---------- 計測 ---------- */
+const runOf=id=>S.runs[id]||null;
+const runningId=()=>Object.keys(S.runs).find(k=>S.runs[k]&&S.runs[k].t0)||null;
+const elapsedOf=r=>r?r.acc+(r.t0?Date.now()-r.t0:0):0;
+function fixSel(){
+  if(!validSet(S.set))S.set='kyote';
+  const rid=runningId();if(rid){const I=info(rid);if(I){S.set=I.set;S.sel=rid}}
+  const A=active();
+  if(!A.includes(S.sel))S.sel=A.includes(S.sels[S.set])?S.sels[S.set]:(A[0]||null);
+  S.sels[S.set]=S.sel;
+  for(const k of Object.keys(S.runs))if(!info(k))delete S.runs[k];
+}
+
+/* ---------- 画面 ---------- */
+const VIEWS=['clock','rec','plan','set','subj'];
+let subjEdit=false;
+function setTab(t){
+  S.tab=t;fixSel();
+  if(!S.sel&&t!=='subj'&&t!=='set'){t='subj';S.tab=t}
+  save();
+  for(const k of VIEWS)$('v-'+k).hidden=k!==t;
+  $('main').scrollTop=0;
+  drawHead();drawBar();
+  if(t==='clock'){drawDial();ctl();tick()}
+  if(t==='rec')drawRec();
+  if(t==='plan')setS2(S.s2);
+  if(t==='set')drawSet();
+  if(t==='subj')drawSubj();
+}
+const redraw=()=>setTab(S.tab);
+function drawHead(){
+  const I=S.sel?info(S.sel):null,clock=S.tab==='clock'&&I;
+  $('ttl').hidden=!!clock;$('pickWrap').hidden=!clock;
+  if(clock){
+    const rid=runningId();
+    $('pick').innerHTML=active().map(id=>{const i=info(id);return`<option value="${id}" ${id===S.sel?'selected':''} ${rid&&id!==rid?'disabled':''}>${esc(i.short)}</option>`}).join('');
+    $('pmeta').textContent=`${setName(I.set)}　${dayLabel(I)}　${hm(I.st)}–${hm(I.st+I.min)}`;
+    return;
+  }
+  const lab={rec:'記録',plan:'配分',set:'設定',subj:'科目'}[S.tab]||'';
+  $('hsub').textContent=lab+(I&&S.tab!=='set'&&S.tab!=='subj'?'・'+I.short:'');
+  $('hmeta').textContent=S.tab==='subj'?setName(S.set):(I&&S.tab!=='set'?`${setName(I.set)}　${dayLabel(I)}　${hm(I.st)}–${hm(I.st+I.min)}`:'');
+}
+function drawBar(){
+  const none=!active().length;
+  document.querySelectorAll('[data-go]').forEach(b=>{b.setAttribute('aria-current',b.dataset.go===S.tab);b.disabled=none&&!['subj','set'].includes(b.dataset.go)});
+  $('tbClock').textContent=S.sel?info(S.sel).short:'時計';
+}
+function setS2(s){
+  S.s2=s;save();
+  $('p-plan').hidden=s!=='plan';$('p-list').hidden=s!=='list';
+  document.querySelectorAll('[data-s2]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.s2===s));
+  if(s==='plan')drawPlan();else drawList();
+}
+function drawSet(){
+  document.querySelectorAll('[data-face]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.face===S.face));
+  $('tg-p').setAttribute('aria-checked',S.pon!==false);$('tg-n').setAttribute('aria-checked',S.notif!==false);
+  $('saveNote').textContent=cloud?'記録と設定はアカウントに保存（他の人には見えない）。':'この端末のブラウザに保存中。';
+}
+
+/* ---------- 文字盤 ---------- */
+const pt=(r,deg)=>{const a=deg*Math.PI/180;return[(100+r*Math.sin(a)).toFixed(2),(100-r*Math.cos(a)).toFixed(2)]};
+function arc(r,d0,d1){const[x0,y0]=pt(r,d0),[x1,y1]=pt(r,d1);return`M${x0} ${y0}A${r} ${r} 0 ${d1-d0>180?1:0} 1 ${x1} ${y1}`}
+function drawDial(){
+  const id=S.sel;if(!id)return;
+  const I=info(id),st=I.st,T=I.min,B=bounds(id),on=S.pon!==false;
+  const occ=[],ringOf=B.map(x=>{const pos=[];for(let m=Math.floor(x.a);m<Math.min(x.b,x.a+60);m++)pos.push((st+m)%60);let k=0;while(occ[k]&&pos.some(p=>occ[k][p]))k++;(occ[k]=occ[k]||[]);pos.forEach(p=>occ[k][p]=1);return k});
+  const rings=Math.max(1,occ.length);
+  const ext=on?6+rings*11:2;
+  $('dial').setAttribute('viewBox',`${-ext} ${-ext} ${200+2*ext} ${200+2*ext}`);
+  let g='<circle cx="100" cy="100" r="100" fill="var(--bg)" stroke="var(--mut)" stroke-width="1.2"/>';
+  for(let i=0;i<60;i++){const L=i%5?5:10,[x0,y0]=pt(99,i*6),[x1,y1]=pt(99-L,i*6);g+=`<line x1="${x0}" y1="${y0}" x2="${x1}" y2="${y1}" stroke="var(--ink)" stroke-width="${i%5?.7:1.8}"/>`}
+  for(let h=1;h<=12;h++){const[x,y]=pt(78,h*30);g+=`<text x="${x}" y="${y}" font-size="12" font-weight="700" text-anchor="middle" dominant-baseline="central" fill="var(--mut)">${h}</text>`}
+  let labs='';
+  if(on){B.forEach((x,i)=>{
+    const r=106+ringOf[i]*11,d0=((st+x.a)%60)*6+.8,d1=d0+Math.min(x.b-x.a,59.9)*6-1.6;
+    let s='';
+    if(d1>d0)s+=`<path d="${arc(r,d0,d1)}" stroke="${color(x,i)}" stroke-width="10" fill="none"/>`;
+    if(x.b-x.a>=2){const[tx,ty]=pt(r,(d0+d1)/2);labs+=`<g data-i="${i}"><text x="${tx}" y="${ty}" font-size="8" font-weight="700" text-anchor="middle" dominant-baseline="central" fill="var(--ink)">${esc(short(x.n))}</text></g>`}
+    g+=`<g data-i="${i}">${s}</g>`;
+  })}
+  if(on){const[x0,y0]=pt(100.5,(st%60)*6),[x1,y1]=pt(111,(st%60)*6);g+=`<line x1="${x0}" y1="${y0}" x2="${x1}" y2="${y1}" stroke="var(--red)" stroke-width="2.4" stroke-linecap="round"/>`}
+  g+=labs;
+  g+='<line id="hh" x1="100" y1="110" x2="100" y2="48" stroke="var(--ink)" stroke-width="5.5" stroke-linecap="round"/>';
+  g+='<line id="mh" x1="100" y1="112" x2="100" y2="6" stroke="var(--ink)" stroke-width="3" stroke-linecap="round"/>';
+  g+='<line id="sh" x1="100" y1="118" x2="100" y2="1" stroke="var(--a)" stroke-width="1.1"/>';
+  g+='<circle cx="100" cy="100" r="4" fill="var(--a)"/>';
+  $('dial').innerHTML=g;
+  const v=$('v-clock');v.classList.toggle('nop',!on);v.classList.toggle('dig',S.face==='dig');
+  $('bar').innerHTML=B.map((x,i)=>`<i style="width:${(x.b-x.a)/T*100}%;background:${color(x,i)}"></i>`).join('')+'<i class="cur" id="cur"></i>';
+  lastI=-2;
+}
+
+/* ---------- ループ・通知 ---------- */
+let lastI=-2,ft=0,lastRun=null,ac=null,wI=null,wId=null;
+function ping(end){
+  try{navigator.vibrate&&navigator.vibrate(end?[300,120,300,120,300]:[200,100,200])}catch(e){}
+  try{if(!ac)return;const n=end?3:2;for(let k=0;k<n;k++){const o=ac.createOscillator(),g=ac.createGain(),t=ac.currentTime+k*.22;o.frequency.value=880;g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(.25,t+.02);g.gain.exponentialRampToValueAtTime(.0001,t+.16);o.connect(g).connect(ac.destination);o.start(t);o.stop(t+.18)}}catch(e){}
+}
+function audioOn(){try{if(!ac){const A=window.AudioContext||window.webkitAudioContext;if(A)ac=new A()}if(ac&&ac.state==='suspended')ac.resume()}catch(e){}}
+function watch(){
+  const id=runningId();if(!id){wId=null;return}
+  const I=info(id),T=I.min*60000,r=runOf(id),e=elapsedOf(r),em=Math.min(e,T)/60000,B=bounds(id),i=e>=T?B.length:B.findIndex(x=>em<x.b);
+  if(wId===id&&wI!==i&&S.notif!==false)ping(e>=T);wId=id;wI=i;
+  if(e>=T){r.acc=T;r.t0=null;save();unlock();if(S.tab==='clock'){ctl();drawHead()}}
+}
+function tick(){
+  if(S.tab!=='clock'||!S.sel)return;
+  const id=S.sel,I=info(id),T=I.min*60000,r=runOf(id);let e=Math.min(elapsedOf(r),T);
+  const st=I.st,now=st*60+e/1000;
+  $('clock').textContent=hms(now);
+  const H=now/3600,M=(now/60)%60,Sx=now%60;
+  const rot=(el,d)=>{const n=$(el);if(n)n.setAttribute('transform',`rotate(${d.toFixed(2)} 100 100)`)};
+  rot('hh',(H%12)*30);rot('mh',M*6);rot('sh',Math.floor(Sx)*6);
+  const em=e/60000,B=bounds(id),i=e>=T?B.length:B.findIndex(x=>em<x.b);
+  const c=$('cur');if(c)c.style.left=`calc(${e/T*100}% - 1px)`;
+  document.querySelectorAll('#dial g[data-i]').forEach(g=>g.style.opacity=+g.dataset.i<i?.3:1);
+  let dl='';
+  if(r&&r.laps&&r.laps.length>(r.skip||0)){const k=r.laps.length-1,ps=plan(id).secs;let cum=0;for(let j=0;j<=k&&j<ps.length;j++)cum+=+ps[j].m||0;const d=r.laps[k]/1000-cum*60;dl=`予定より <b>${d>=0?'+':''}${mmss(d)}</b>　`}
+  if(e>=T){$('now').innerHTML=`<span class="nm">試験終了</span><span class="lim">${hm(st+I.min)}</span>`;$('next').innerHTML=dl}
+  else{
+    const x=B[i],nx=B[i+1];
+    $('now').innerHTML=`<span class="nm">${esc(x.n)}</span><span class="lim">${hm(st+x.b)}まで<b>${mmss((x.b-em)*60)}</b></span>`;
+    $('next').innerHTML=dl+esc(nx?`次 ${nx.n} 〜${hm(st+nx.b)}`:`次 終了 ${hm(st+I.min)}`);
+  }
+  if(lastI>=0&&i!==lastI&&lastRun===id){const n=$('now');n.classList.add('flash');clearTimeout(ft);ft=setTimeout(()=>n.classList.remove('flash'),1500)}
+  lastRun=r&&r.t0?id:null;lastI=i;
+}
+function ctl(){
+  if(!S.sel)return;
+  const r=runOf(S.sel),T=info(S.sel).min*60000,secs=plan(S.sel).secs,k=r&&r.laps?r.laps.length:0;
+  $('go').textContent=r&&r.t0?'一時停止':r&&r.acc>0&&r.acc<T&&!r.fresh?'再開':'スタート';
+  const showLap=!!(r&&r.t0&&k<secs.length);
+  $('lap').hidden=!showLap;if(showLap)$('lap').innerHTML=`区切り<small>${esc(secs[k].n)} 終わり</small>`;
+  $('stamp').hidden=!(r&&r.t0);if(r&&r.t0)$('stamp').innerHTML=(r.stamps||[]).length?`スタンプ<small>${r.stamps.length}回</small>`:'スタンプ';
+  $('torec').hidden=!(r&&!r.t0&&r.acc>0&&!r.fresh);
+}
+
+/* 画面を消さない */
+let wl=null;
+async function lock(){try{if('wakeLock'in navigator&&!wl){wl=await navigator.wakeLock.request('screen');wl.addEventListener('release',()=>{wl=null})}}catch(e){}}
+function unlock(){try{if(wl)wl.release()}catch(e){}wl=null}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&runningId())lock()});
+
+/* ---------- 配分 ---------- */
+function drawPlan(){
+  const I=info(S.sel),p=plan(S.sel);
+  if(I.u){
+    $('slotrow').innerHTML=`<div class="crow" style="width:100%"><label class="f">名前<input id="cn" value="${esc(I.u.name)}"></label><label class="f">開始<input id="cs" type="time" value="${esc(I.u.start)}"></label><label class="f">分<input id="cm" type="number" inputmode="numeric" min="1" max="600" value="${I.min}"></label></div>`;
+    $('cn').oninput=e=>{I.u.name=e.target.value;save();drawHead();drawBar()};
+    $('cs').oninput=e=>{if(runningId()===I.id)return;I.u.start=e.target.value||'00:00';save();updEnds();drawHead()};
+    $('cm').oninput=e=>{if(runningId()===I.id)return;I.u.min=Math.max(1,Math.min(600,parseInt(e.target.value,10)||1));save();updEnds();drawHead()};
+  }else{
+    const two=(I.g==='chireki'||I.g==='rika')&&inGrp(I.g).length===2;
+    $('slotrow').innerHTML=`<b>${esc(I.name)}</b><span class="fn" style="margin:0">${hm(I.st)}–${hm(I.st+I.min)}（${I.min}分${two?(I.st===570?'・第1解答':'・第2解答'):''}）</span>`;
+  }
+  $('rows').innerHTML=p.secs.map((x,i)=>`<tr><td><input class="n" data-i="${i}" value="${esc(x.n)}" aria-label="大問名">${x.p!=null?`<div class="cap">${x.p}点</div>`:''}</td><td><input class="m" type="number" inputmode="numeric" min="0" max="600" data-i="${i}" value="${+x.m||0}" aria-label="分"></td><td class="end" id="end-${i}"></td><td><button class="del" data-i="${i}" aria-label="削除">×</button></td></tr>`).join('');
+  updEnds();
+}
+function updEnds(){
+  const I=info(S.sel),p=plan(S.sel);let c=0;
+  p.secs.forEach((x,i)=>{c+=Math.max(0,+x.m||0);const td=$('end-'+i);if(td){td.textContent=hm(I.st+c);td.classList.toggle('over',c>I.min)}});
+  const t=$('tot');t.classList.toggle('over',c>I.min);
+  t.textContent=c===I.min?`合計 ${c}分 / ${I.min}分`:c<I.min?`合計 ${c}分 / ${I.min}分（余り ${I.min-c}分）`:`合計 ${c}分 / ${I.min}分（${c-I.min}分オーバー）`;
+}
+$('rows').addEventListener('input',e=>{
+  const t=e.target,i=+t.dataset.i,p=plan(S.sel);if(!p.secs[i])return;
+  if(t.classList.contains('n'))p.secs[i].n=t.value;
+  if(t.classList.contains('m'))p.secs[i].m=Math.max(0,Math.min(600,parseInt(t.value,10)||0));
+  save();updEnds();
+});
+$('rows').addEventListener('click',e=>{const b=e.target.closest('.del');if(!b)return;plan(S.sel).secs.splice(+b.dataset.i,1);save();drawPlan()});
+const addRow=(n,m)=>{plan(S.sel).secs.push({n,m});save();drawPlan();const ins=document.querySelectorAll('#rows input.m');if(ins.length)ins[ins.length-1].focus()};
+$('addr').onclick=()=>addRow('見直し',5);
+$('add').onclick=()=>addRow(`第${plan(S.sel).secs.filter(x=>!isRest(x.n)).length+1}問`,5);
+function arm(b,label,fn){let t0=0;const orig=b.textContent;b.onclick=()=>{if(Date.now()-t0<4000){t0=0;b.textContent=orig;fn();return}t0=Date.now();b.textContent=label;setTimeout(()=>{if(t0&&Date.now()-t0>=3900){t0=0;b.textContent=orig}},4000)}}
+arm($('def'),'もう一度押すと戻す',()=>{const I=info(S.sel);S.plans[S.sel]={sig:I.sig,secs:fresh(I)};save();drawPlan()});
+
+/* ---------- 一覧 ---------- */
+function drawList(){
+  const A=active().map(info);let h='';
+  for(const d of[1,2,3]){
+    const L=A.filter(i=>i.day===d);if(!L.length)continue;
+    h+=`<h2>${d===3?'自作':esc(dayLabel(L[0]))}</h2><div class="list">`+L.map(I=>`<div class="card"><h3>${esc(I.name)}</h3><p class="tm">${hm(I.st)}–${hm(I.st+I.min)}（${I.min}分）</p><ol>${bounds(I.id).map(x=>`<li><span>${esc(x.n)}</span><b>〜${hm(I.st+x.b)}</b></li>`).join('')}</ol></div>`).join('')+'</div>';
+  }
+  if(S.set==='kyote')h+='<p class="fn">令和9年度の時間割：1日目 地歴公民（2科目9:30–11:40／1科目10:40–11:40）、国語13:00–14:30、英語R 15:20–16:40。2日目 理科（地歴公民と同じ）、数学①13:00–14:10、数学②15:00–16:10、情報Ⅰ17:00–18:00。最初の配分は2026年本試験の大問別配点の比率（国語は20・20・10・20・20分）。</p>';
+  if(S.set==='meidai')h+='<p class="fn">令和9年度 名大前期・情報学部 自然情報学科：2/25 外国語10:00–11:45、理科13:45–15:00（物理か化学の1科目）、2/26 数学10:00–12:30。英語と化学の配分は大問ごとの分量から決めた目安、物理と数学は大問数でほぼ均等。</p>';
+  $('p-list').innerHTML=h;
+}
+
+/* ---------- 科目（セット） ---------- */
+function drawSubj(){
+  if(subjEdit){drawSetup();return}
+  const rid=runningId(),A=active();
+  const sets=[...Object.keys(SETS).map(k=>[k,SETS[k].name]),...S.csets.map(c=>[c.id,c.name||'セット'])];
+  let h=`<div class="tags" style="margin-bottom:14px">${sets.map(([k,n])=>`<button class="tag" data-set="${k}" aria-pressed="${k===S.set}" ${rid&&k!==S.set?'disabled':''}>${esc(n)}</button>`).join('')}<button class="tag" id="newset">＋ セット</button></div>`;
+  h+='<div class="slist">'+(A.map(id=>{const i=info(id),r=runOf(id);return`<button class="srow" data-sub="${id}" aria-current="${id===S.sel}" ${rid&&id!==rid?'disabled':''}><b>${esc(i.short)}</b><small>${r&&r.t0?'計測中':r&&r.acc>0&&!r.fresh?'途中':(i.day===3?'':esc(dayLabel(i))+' ')+hm(i.st)+'–'+hm(i.st+i.min)}</small></button>`}).join('')||'<p class="fn">まだ科目がない。</p>')+'</div>';
+  h+='<div class="ctl">';
+  if(S.set==='kyote')h+='<button class="btn sm" id="editK">共テの科目を選ぶ</button>';
+  h+='<button class="btn sm" id="addc">＋ 自作の科目</button>';
+  const cu=info(S.sel);if(cu&&cu.u)h+=`<button class="btn sm" id="delc">「${esc(cu.short)}」を削除</button>`;
+  h+='</div>';
+  const cs=S.csets.find(c=>c.id===S.set);
+  if(cs)h+=`<h2>このセット</h2><label class="f">名前<input id="csn" value="${esc(cs.name)}"></label><div class="ctl"><button class="btn sm" id="delset">セットを削除</button></div>`;
+  $('v-subj').innerHTML=h;
+  const q=s=>$('v-subj').querySelectorAll(s);
+  q('[data-set]').forEach(b=>b.onclick=()=>{if(b.disabled)return;S.set=b.dataset.set;S.sel=null;fixSel();save();drawHead();drawBar();drawSubj()});
+  q('[data-sub]').forEach(b=>b.onclick=()=>{if(b.disabled)return;S.sel=b.dataset.sub;S.sels[S.set]=S.sel;save();setTab('clock')});
+  $('newset').onclick=()=>{const c={id:'s'+Date.now().toString(36),name:'セット'+(S.csets.length+1)};S.csets.push(c);S.set=c.id;S.sel=null;fixSel();save();drawHead();drawBar();drawSubj();const n=$('csn');if(n){n.focus();n.select()}};
+  if($('editK'))$('editK').onclick=()=>{subjEdit=true;drawSubj()};
+  $('addc').onclick=()=>{const u={id:'c'+Date.now(),set:S.set,name:'自作科目',start:'09:00',min:60};S.custom.push(u);S.sel=u.id;S.s2='plan';save();setTab('plan');const n=$('cn');if(n){n.focus();n.select()}};
+  if($('delc'))arm($('delc'),'もう一度押すと削除',()=>{const id=S.sel;S.custom=S.custom.filter(u=>u.id!==id);delete S.plans[id];delete S.runs[id];S.sel=null;fixSel();save();drawHead();drawBar();drawSubj()});
+  if(cs){$('csn').oninput=e=>{cs.name=e.target.value;save();drawHead();$('v-subj').querySelector(`[data-set="${cs.id}"]`).textContent=cs.name||'セット'};
+    arm($('delset'),'もう一度押すと削除（中の自作科目も消える）',()=>{S.custom.filter(u=>u.set===cs.id).forEach(u=>{delete S.plans[u.id];delete S.runs[u.id]});S.custom=S.custom.filter(u=>u.set!==cs.id);S.csets=S.csets.filter(c=>c!==cs);S.set='kyote';S.sel=null;fixSel();save();drawHead();drawBar();drawSubj()})}
+}
+function drawSetup(){
+  if(runningId()){$('v-subj').innerHTML='<p>計測中は科目を変えられない。一時停止してから変えて。</p>';return}
+  let h='';
+  for(const d of[1,2]){
+    h+=`<h2>${SETS.kyote.days[d]}</h2>`;
+    Object.entries(GRP).filter(([,G])=>G.day===d).forEach(([g,G])=>{
+      const items=CAT.filter(c=>c.g===g),on=items.filter(c=>S.setup.on[c.id]);
+      const tm=G.max>1?(on.length===2?'2科目 9:30–11:40':'1科目 10:40–11:40'):(hm(items[0].start)+'–'+hm(items[0].start+items[0].min));
+      h+=`<fieldset><legend>${G.label}<small>${G.max>1?'最大2科目・':''}${tm}</small></legend>`;
+      items.forEach(c=>{
+        const ck=!!S.setup.on[c.id],dis=!ck&&on.length>=G.max&&G.max>1;
+        h+=`<label class="opt${dis?' dis':''}"><input type="checkbox" data-on="${c.id}" ${ck?'checked':''} ${dis?'disabled':''}><span>${c.name}</span></label>`;
+        if(ck&&c.areas){
+          const pk=S.setup.areas[c.id]||[];
+          h+=`<div class="sub"><p>${c.areas.length}つから2つ${pk.length!==2?` <span class="warn">あと${2-pk.length}つ</span>`:''}</p>`+c.areas.map(([k,nm])=>{const a=pk.includes(k),ad=!a&&pk.length>=2;return`<label class="opt${ad?' dis':''}"><input type="checkbox" data-area="${c.id}:${k}" ${a?'checked':''} ${ad?'disabled':''}><span>${nm}</span></label>`}).join('')+'</div>';
+        }
+      });
+      if(on.length===2){
+        const f=on.some(c=>c.id===S.setup.first[g])?S.setup.first[g]:on[0].id;
+        h+='<div class="sub"><p>先に解く方（9:30〜）</p>'+on.map(c=>`<label class="opt"><input type="radio" name="f-${g}" data-first="${g}:${c.id}" ${c.id===f?'checked':''}><span>${c.short}</span></label>`).join('')+'</div>';
+      }
+      if(G.note)h+=`<p class="fn">${G.note}</p>`;
+      h+='</fieldset>';
+    });
+  }
+  h+='<div class="ctl"><button class="btn main" id="done">決定</button></div><p class="warn" id="serr"></p>';
+  $('v-subj').innerHTML=h;
+  $('done').onclick=()=>{
+    const bad=CAT.filter(c=>c.areas&&S.setup.on[c.id]&&(S.setup.areas[c.id]||[]).length!==2);
+    if(bad.length){$('serr').textContent=`${bad.map(c=>c.short).join('・')}の範囲を2つ選んで。`;return}
+    subjEdit=false;fixSel();save();drawHead();drawBar();drawSubj();$('main').scrollTop=0;
+  };
+}
+$('v-subj').addEventListener('change',e=>{
+  const t=e.target;if(!subjEdit)return;
+  if(t.dataset.on)S.setup.on[t.dataset.on]=t.checked;
+  if(t.dataset.area){const[id,k]=t.dataset.area.split(':');let a=S.setup.areas[id]||[];a=t.checked?[...a.filter(x=>x!==k),k].slice(-2):a.filter(x=>x!==k);S.setup.areas[id]=a}
+  if(t.dataset.first){const[g,id]=t.dataset.first.split(':');S.setup.first[g]=id}
+  const y=$('main').scrollTop;fixSel();save();drawSetup();drawBar();$('main').scrollTop=y;
+});
+
+/* ---------- 記録 ---------- */
+let ed=null,catF='';
+const recsOf=(id,cat)=>S.recs.filter(r=>r.sub===id&&(!cat||r.cat===cat)).sort((a,b)=>(a.date||'')<(b.date||'')?-1:(a.date||'')>(b.date||'')?1:(a.ts||0)-(b.ts||0));
+const hasScore=r=>r.score!=null&&r.score!==''&&Number.isFinite(+r.score);
+const allCats=()=>[...new Set(S.recs.map(x=>x.cat).filter(Boolean))];
+function stats(v){
+  const n=v.length,s=[...v].sort((a,b)=>a-b),mean=v.reduce((a,b)=>a+b,0)/n;
+  const med=n%2?s[(n-1)/2]:(s[n/2-1]+s[n/2])/2,sd=Math.sqrt(v.reduce((a,b)=>a+(b-mean)**2,0)/n);
+  const l3=v.slice(-3);return{n,mean,med,max:s[n-1],min:s[0],sd,l3:l3.reduce((a,b)=>a+b,0)/l3.length,last:v[n-1]};
+}
+function lineSVG(pts,M,unit){
+  const W=320,H=140,l=30,r=10,t=10,b=22,w=W-l-r,h=H-t-b,n=pts.length;
+  const X=i=>l+(n===1?w/2:i*w/(n-1)),Y=v=>t+h-(Math.max(0,Math.min(M,v))/M)*h;
+  let g='';
+  for(const q of[0,.5,1]){const y=Y(M*q).toFixed(1);g+=`<line x1="${l}" x2="${W-r}" y1="${y}" y2="${y}" stroke="var(--line)"/><text x="${l-5}" y="${y}" font-size="10" text-anchor="end" dominant-baseline="central" fill="var(--mut)">${Math.round(M*q)}</text>`}
+  if(n>1)g+=`<polyline points="${pts.map((p,i)=>X(i).toFixed(1)+','+Y(p.v).toFixed(1)).join(' ')}" fill="none" stroke="var(--a)" stroke-width="2" stroke-linejoin="round"/>`;
+  g+=pts.map((p,i)=>`<circle cx="${X(i).toFixed(1)}" cy="${Y(p.v).toFixed(1)}" r="3.5" fill="var(--bg)" stroke="var(--a)" stroke-width="2"><title>${esc(md(p.d))} ${esc(p.name||'')} ${f1(p.v)}${unit}</title></circle>`).join('');
+  g+=`<text x="${X(0)}" y="${H-5}" font-size="10" text-anchor="${n===1?'middle':'start'}" fill="var(--mut)">${esc(md(pts[0].d))}</text>`;
+  if(n>1)g+=`<text x="${X(n-1)}" y="${H-5}" font-size="10" text-anchor="end" fill="var(--mut)">${esc(md(pts[n-1].d))}</text>`;
+  return`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="点数の推移">${g}</svg>`;
+}
+function hbars(rows,leg){return(leg||'')+'<div class="hb">'+rows.map(x=>`<span class="l">${esc(x.l)}</span><span class="tr"><i style="width:${Math.max(0,Math.min(100,x.w))}%"></i>${x.w2!=null?`<i class="p" style="width:${Math.max(0,Math.min(100,x.w2))}%"></i>`:''}</span><span class="v">${x.v}</span>`).join('')+'</div>'}
+function drawRec(){
+  if(ed){drawEditor();return}
+  const I=info(S.sel);if(!I){$('v-rec').innerHTML='';return}
+  const all=recsOf(S.sel,''),cats=[...new Set(all.map(r=>r.cat).filter(Boolean))];
+  if(catF&&!cats.includes(catF))catF='';
+  const L=recsOf(S.sel,catF),sc=L.filter(hasScore);
+  let h=`<div class="rhead"><select id="rsub" aria-label="科目">${active().map(id=>`<option value="${id}" ${id===S.sel?'selected':''}>${esc(info(id).short)}</option>`).join('')}</select>${cats.length?`<select id="catf" aria-label="カテゴリ"><option value="">すべて</option>${cats.map(c=>`<option ${c===catF?'selected':''}>${esc(c)}</option>`).join('')}</select>`:''}</div>`;
+  if(sc.length){
+    const rate=new Set(sc.map(r=>+r.max||0)).size>1,M=rate?100:(+sc[0].max||100),unit=rate?'%':'点';
+    const val=r=>rate?(+r.score)/(+r.max||100)*100:+r.score;
+    const v=sc.map(val),s=stats(v);
+    h+=`<div class="sum"><div class="k"><span>平均</span><b>${f1(s.mean)}<small>${unit}</small></b></div><div><span>最高</span><b>${f1(s.max)}</b></div><div><span>直近</span><b>${f1(s.last)}</b></div><div><span>回数</span><b>${s.n}</b></div></div>`;
+    h+=`<div class="chart">${lineSVG(sc.map((r,i)=>({v:v[i],d:r.date,name:r.name})),M,unit)}</div>`;
+    h+=`<details><summary>詳細</summary>`;
+    h+=`<div class="stats">${[['平均',s.mean],['中央値',s.med],['最高',s.max],['最低',s.min],['標準偏差',s.sd],['直近3回',s.l3]].map(([k,x])=>`<div><span>${k}</span><b>${f1(x)}</b></div>`).join('')}</div><p class="fn" style="margin-top:2px">単位：${rate?'得点率（%）。満点が記録ごとに違うため':'点'}</p>`;
+    const pm={};L.forEach(r=>(r.parts||[]).forEach(p=>{if(p.s==null||p.s===''||!(+p.max>0))return;const o=pm[p.n]||(pm[p.n]={s:0,m:0});o.s+=+p.s;o.m+=+p.max}));
+    const pk=Object.keys(pm);
+    if(pk.length)h+=`<h2>大問別の得点率</h2>`+hbars(pk.map(n=>({l:n,w:pm[n].s/pm[n].m*100,v:f1(pm[n].s/pm[n].m*100)+'%'})));
+    const tm={};L.forEach(r=>(r.times||[]).forEach(t=>{if(t.sec==null)return;const o=tm[t.n]||(tm[t.n]={s:0,k:0,p:+t.plan||0});o.s+=+t.sec;o.k++}));
+    const tk=Object.keys(tm);
+    if(tk.length){const mx=Math.max(...tk.map(n=>Math.max(tm[n].s/tm[n].k,tm[n].p*60)))||1;h+=`<h2>大問別の時間（平均）</h2>`+hbars(tk.map(n=>({l:n,w:tm[n].s/tm[n].k/mx*100,w2:tm[n].p*60/mx*100,v:mmss(tm[n].s/tm[n].k)})),`<p class="leg"><i style="background:var(--s1);margin-left:0"></i>実際<i style="background:var(--s2)"></i>予定</p>`)}
+    const allSc=all.filter(hasScore),cs=[...new Set(allSc.map(r=>r.cat||'（なし）'))];
+    if(cs.length>1&&!catF){const vv=c=>{const a=allSc.filter(r=>(r.cat||'（なし）')===c).map(r=>(+r.score)/(+r.max||100)*100);return a.reduce((x,y)=>x+y,0)/a.length};h+=`<h2>カテゴリ別の平均得点率</h2>`+hbars(cs.map(c=>({l:c,w:vv(c),v:f1(vv(c))+'%'})))}
+    if(sc.length>=3){const bins=Array(10).fill(0);v.forEach(x=>{bins[Math.min(9,Math.floor((x/M*100)/10))]++});const mb=Math.max(...bins)||1,f0=bins.findIndex(c=>c>0);h+=`<h2>点数の分布（得点率10%ごと）</h2>`+hbars(bins.map((c,i)=>({l:`${i*10}〜${i===9?100:i*10+9}%`,w:c/mb*100,v:c+'回'})).filter((x,i)=>i>=f0))}
+    h+='</details>';
+  }
+  if(!L.length)h+='<p class="fn">まだ記録がない。時計で計測して「記録」を押すと残る。</p>';
+  else h+='<div class="ritems">'+[...L].reverse().map(r=>`<button class="ritem" data-r="${esc(r.id)}"><span class="d">${esc(md(r.date))}</span><span class="nm">${esc(r.name||'（名前なし）')}${r.cat?`<small>${esc(r.cat)}</small>`:''}</span><b>${hasScore(r)?esc(r.score)+'<small>/'+esc(r.max)+'</small>':(r.total?mmss(r.total):'–')}</b></button>`).join('')+'</div>';
+  h+='<div class="ctl"><button class="btn sm" id="newr">＋ 計測せずに記録</button></div>';
+  $('v-rec').innerHTML=h;
+  $('rsub').onchange=e=>{S.sel=e.target.value;S.sels[S.set]=S.sel;save();drawHead();drawBar();drawRec()};
+  $('newr').onclick=()=>{ed=newRec(S.sel,[]);drawEditor()};
+  const cf=$('catf');if(cf)cf.onchange=()=>{catF=cf.value;drawRec()};
+  $('v-rec').querySelectorAll('[data-r]').forEach(b=>b.onclick=()=>{const r=S.recs.find(x=>x.id===b.dataset.r);if(r){ed=clean(r);drawEditor()}});
+}
+function autoName(id){const I=info(id),re=new RegExp('^'+I.short.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'(\\d+)$');let n=0;S.recs.forEach(r=>{if(r.sub===id){const m=String(r.name||'').match(re);if(m)n=Math.max(n,+m[1])}});return I.short+(n+1)}
+function newRec(id,times){
+  const I=info(id),p=plan(id);
+  const parts=p.secs.filter(x=>!isRest(x.n)).map(x=>({n:x.n,max:x.p!=null?x.p:null,s:null}));
+  const max=parts.length&&parts.every(x=>x.max!=null)?parts.reduce((a,x)=>a+x.max,0):(I.full||100);
+  return{id:'r'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),sub:id,subName:I.name,date:today(),name:autoName(id),cat:'',score:null,max,parts,times,stamps:[],total:null,memo:'',ts:Date.now(),isNew:true};
+}
+function storeRec(r){delete r.isNew;const out=clean(r);const i=S.recs.findIndex(x=>x.id===out.id);if(i>=0)S.recs[i]=out;else S.recs.push(out);save();putRec(out)}
+function drawEditor(){
+  const r=ed,cats=allCats();
+  if(!r.times||!r.times.length)r.times=plan(r.sub).secs.map(x=>({n:x.n,plan:+x.m||0,sec:null}));
+  const anyPart=(r.parts||[]).some(p=>p.s!=null&&p.s!=='');
+  let h=`<div class="form">
+  <label class="f">名前<input id="fn" value="${esc(r.name)}"></label>
+  <div class="row2"><label class="f">日付<input type="date" id="fd" value="${esc(r.date)}"></label><label class="f">カテゴリ<input id="fc" list="catl" value="${esc(r.cat)}" placeholder="なし"><datalist id="catl">${cats.map(c=>`<option value="${esc(c)}">`).join('')}</datalist></label></div>
+  <div class="row2"><label class="f">点数<input id="fs" type="number" inputmode="decimal" value="${hasScore(r)?esc(r.score):''}"></label><label class="f">満点<input id="fm" type="number" inputmode="decimal" value="${esc(r.max)}"></label></div>
+  <details ${anyPart?'open':''}><summary>大問別の点</summary><table><tbody>${(r.parts||[]).map((p,i)=>`<tr><td class="mid">${esc(p.n)}</td><td><input class="num" data-ps="${i}" type="number" inputmode="decimal" value="${p.s!=null?esc(p.s):''}" aria-label="${esc(p.n)}の点"></td><td class="mid">${p.max!=null?'/ '+esc(p.max):''}</td></tr>`).join('')}</tbody></table></details>
+  <details><summary>大問別の時間（分）</summary><table><thead><tr><th>大問</th><th>予定</th><th>実際</th></tr></thead><tbody>${r.times.map((t,i)=>`<tr><td class="mid">${esc(t.n)}</td><td class="mid">${esc(t.plan)}分</td><td><input class="num" data-ts="${i}" type="number" inputmode="decimal" step="0.1" value="${t.sec!=null?(t.sec/60).toFixed(1):''}" aria-label="${esc(t.n)}の実際の分"></td></tr>`).join('')}</tbody></table></details>
+  ${(r.stamps||[]).length?`<details><summary>タイムスタンプ（${r.stamps.length}）</summary><table><tbody>${r.stamps.map((t,i)=>`<tr><td class="mid">${hms(t.at)}<br><small>${mmss(t.sec)}</small></td><td><input data-sn="${i}" value="${esc(t.note)}" placeholder="メモ"></td><td><button class="del" data-sd="${i}" aria-label="削除">×</button></td></tr>`).join('')}</tbody></table></details>`:''}
+  <details ${r.memo?'open':''}><summary>メモ</summary><textarea id="fx">${esc(r.memo)}</textarea></details>
+  <div class="ctl" style="margin-top:0"><button class="btn main" id="fsave">保存</button><button class="btn" id="fcancel">戻る</button>${r.isNew?'':'<button class="btn" id="fdel">削除</button>'}</div></div>`;
+  $('v-rec').innerHTML=h;$('main').scrollTop=0;
+  const q=s=>$('v-rec').querySelectorAll(s);
+  const sumParts=()=>{let s=0,k=0;q('[data-ps]').forEach(x=>{if(x.value!==''){s+=+x.value;k++}});return k?s:null};
+  q('[data-ps]').forEach(x=>x.oninput=()=>{const s=sumParts();$('fs').placeholder=s!=null?String(s):''});
+  const sync=()=>{
+    r.date=$('fd').value||today();r.cat=$('fc').value.trim();r.name=$('fn').value.trim()||autoName(r.sub);
+    const sv=$('fs').value;r.score=sv!==''?+sv:sumParts();r.max=+$('fm').value||100;
+    q('[data-ps]').forEach(x=>{r.parts[+x.dataset.ps].s=x.value!==''?+x.value:null});
+    q('[data-ts]').forEach(x=>{r.times[+x.dataset.ts].sec=x.value!==''?Math.round(+x.value*60):null});
+    q('[data-sn]').forEach(x=>{r.stamps[+x.dataset.sn].note=x.value});
+    r.memo=$('fx').value;
+  };
+  q('[data-sd]').forEach(b=>b.onclick=()=>{sync();r.stamps.splice(+b.dataset.sd,1);drawEditor()});
+  $('fcancel').onclick=()=>{ed=null;drawRec()};
+  if($('fdel'))arm($('fdel'),'もう一度押すと削除',()=>{S.recs=S.recs.filter(x=>x.id!==r.id);delRec(r.id);save();ed=null;drawRec();toast('削除した')});
+  $('fsave').onclick=()=>{sync();storeRec(r);ed=null;drawRec();toast('保存した')};
+}
+function runToTimes(id){
+  const r=runOf(id),secs=plan(id).secs,e=elapsedOf(r),laps=r.laps||[],skip=r.skip||0;let prev=r.from||0;
+  return secs.map((x,i)=>{if(i<skip)return{n:x.n,plan:+x.m||0,sec:null};let end=laps[i];if(end==null){if(i===laps.length&&e>prev)end=e;else return{n:x.n,plan:+x.m||0,sec:null}}const o={n:x.n,plan:+x.m||0,sec:Math.round((end-prev)/1000)};prev=end;return o});
+}
+
+/* ---------- 記録シート ---------- */
+let sh=null,shCat='';
+function openSheet(){
+  const id=S.sel,r=runOf(id);if(!r)return;
+  sh=newRec(id,runToTimes(id));sh.total=Math.round((elapsedOf(r)-(r.from||0))/1000);if(r.from)sh.from=Math.round(r.from/1000);
+  sh.stamps=(r.stamps||[]).map(ms=>({sec:Math.round(ms/1000),at:info(id).st*60+Math.round(ms/1000),note:''}));
+  shCat='';$('shName').value=sh.name;$('shTitle').textContent=`記録する（${mmss(sh.total)}）`;
+  const cats=allCats();
+  $('shCats').innerHTML=cats.length?'<div class="tags" role="group" aria-label="カテゴリ">'+cats.map(c=>`<button class="tag" data-c="${esc(c)}" aria-pressed="false">${esc(c)}</button>`).join('')+'</div>':'';
+  $('sheet').classList.add('on');document.body.classList.add('sheet-open');
+}
+const closeSheet=()=>{document.querySelectorAll('.sheet').forEach(x=>x.classList.remove('on'));document.body.classList.remove('sheet-open');sh=null};
+$('shCats').addEventListener('click',e=>{const b=e.target.closest('[data-c]');if(!b)return;shCat=shCat===b.dataset.c?'':b.dataset.c;$('shCats').querySelectorAll('[data-c]').forEach(x=>x.setAttribute('aria-pressed',x.dataset.c===shCat))});
+$('shSave').onclick=()=>{if(!sh)return;sh.name=$('shName').value.trim()||sh.name;sh.cat=shCat;const id=sh.sub;storeRec(sh);delete S.runs[id];save();closeSheet();ctl();tick();toast('保存した')};
+$('shCancel').onclick=closeSheet;
+
+/* ---------- 詳細設定（途中から） ---------- */
+function setPos(ms){
+  const id=S.sel,T=info(id).min*60000;ms=Math.max(0,Math.min(T-60000,Math.round(ms)));
+  if(ms===0){delete S.runs[id]}
+  else{const secs=plan(id).secs;let cum=0;const laps=[];for(const x of secs){cum+=(+x.m||0)*60000;if(cum<=ms)laps.push(cum);else break}
+    S.runs[id]={acc:ms,t0:null,laps,stamps:[],skip:laps.length,from:ms,fresh:true}}
+  save();unlock();closeSheet();ctl();tick();
+  toast(`${hm(info(id).st+ms/60000)} から。スタートで始まる`);
+}
+const tIn=m=>p2(Math.floor(m/60)%24)+':'+p2(Math.round(m)%60);
+function openOpt(){
+  const id=S.sel,I=info(id),r=runOf(id),cur=Math.floor(elapsedOf(r)/60000);let c=0;
+  $('fromSecs').innerHTML=plan(id).secs.map(x=>{const a=c;c+=+x.m||0;return a<I.min?`<button class="tag" data-from="${a}">${esc(x.n)}　${hm(I.st+a)}</button>`:''}).join('');
+  $('ftime').min=tIn(I.st);$('ftime').max=tIn(I.st+I.min-1);$('ftime').value=tIn(I.st+cur);$('fmin').max=I.min-1;$('fmin').value=cur;
+  $('optSheet').classList.add('on');document.body.classList.add('sheet-open');
+}
+$('opt').onclick=openOpt;
+$('fromSecs').addEventListener('click',e=>{const b=e.target.closest('[data-from]');if(b)setPos(+b.dataset.from*60000)});
+$('ftime').oninput=()=>{const I=info(S.sel);if($('ftime').value)$('fmin').value=Math.max(0,toMin($('ftime').value)-I.st)};
+$('fmin').oninput=()=>{const I=info(S.sel),v=parseInt($('fmin').value,10);if(Number.isFinite(v))$('ftime').value=tIn(I.st+Math.max(0,v))};
+$('fgo').onclick=()=>{const v=parseInt($('fmin').value,10);if(!Number.isFinite(v)||v<0||v>=info(S.sel).min){toast('試験時間の中で指定して');return}setPos(v*60000)};
+
+/* ---------- 操作 ---------- */
+$('scrim').onclick=closeSheet;
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeSheet()});
+$('pick').onchange=e=>{if(runningId())return;S.sel=e.target.value;S.sels[S.set]=S.sel;save();drawHead();drawBar();drawDial();ctl();tick()};
+document.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>{if(b.disabled)return;ed=null;if(b.dataset.go!=='subj')subjEdit=false;setTab(b.dataset.go)});
+document.querySelectorAll('[data-s2]').forEach(b=>b.onclick=()=>setS2(b.dataset.s2));
+document.querySelectorAll('[data-face]').forEach(b=>b.onclick=()=>{S.face=b.dataset.face;save();drawSet()});
+$('tg-p').onclick=()=>{S.pon=S.pon===false;save();drawSet()};
+$('tg-n').onclick=()=>{S.notif=S.notif===false;if(S.notif){audioOn();ping(false)}save();drawSet()};
+$('go').onclick=()=>{
+  audioOn();
+  const id=S.sel,T=info(id).min*60000;let r=runOf(id);
+  if(!r||r.acc>=T)r=S.runs[id]={acc:0,t0:Date.now(),laps:[],stamps:[]};
+  else if(r.t0){r.acc+=Date.now()-r.t0;r.t0=null}
+  else{r.t0=Date.now();delete r.fresh}
+  save();runningId()?lock():unlock();ctl();tick();drawHead();
+};
+$('lap').onclick=()=>{const r=runOf(S.sel);if(!r||!r.t0)return;(r.laps=r.laps||[]).push(elapsedOf(r));save();ctl();tick()};
+$('stamp').onclick=()=>{const r=runOf(S.sel);if(!r||!r.t0)return;(r.stamps=r.stamps||[]).push(elapsedOf(r));save();ctl();toast(`スタンプ ${hms(info(S.sel).st*60+elapsedOf(r)/1000)}`)};
+$('torec').onclick=openSheet;
+$('rst').onclick=()=>{delete S.runs[S.sel];save();unlock();closeSheet();ctl();tick();drawHead();toast('最初に戻した')};
+const nudge=d=>{const id=S.sel,T=info(id).min*60000;let r=runOf(id);if(!r)r=S.runs[id]={acc:0,t0:null,laps:[],stamps:[]};r.acc=Math.max(0,Math.min(T,r.acc+d*60000));if(r.acc===0&&!r.t0&&!(r.laps||[]).length)delete S.runs[id];save();ctl();tick()};
+$('m1').onclick=()=>{nudge(-1);toast('−1分')};$('p1').onclick=()=>{nudge(1);toast('＋1分')};
+
+fixSel();if(S.set==='kyote'&&!active().length)subjEdit=true;setTab(S.sel?S.tab:'subj');
+if(runningId())lock();
+setInterval(()=>{watch();tick()},250);
+if('serviceWorker'in navigator&&location.protocol==='https:')navigator.serviceWorker.register('service-worker.js').catch(()=>{});
+}
+</script>
+</body>
+</html>
